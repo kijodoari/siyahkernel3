@@ -1,9 +1,9 @@
 /*
  * Copyright (C) 2010-2012 ARM Limited. All rights reserved.
- *
+ * 
  * This program is free software and is provided to you under the terms of the GNU General Public License version 2
  * as published by the Free Software Foundation, and any use by you of this program is subject to the terms of such GNU licence.
- *
+ * 
  * A copy of the licence is included with the program, and can also be obtained from Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
@@ -106,8 +106,6 @@ static void ump_vma_close(struct vm_area_struct * vma)
 
 	DBG_MSG(4, ("VMA close, VMA reference count decremented. VMA: 0x%08lx, reference count: %d\n", (unsigned long)vma, new_val));
 
-	vma_usage_tracker->descriptor->process_mapping_info = vma;
-
 	if (0 == new_val)
 	{
 		ump_memory_allocation * descriptor;
@@ -194,17 +192,11 @@ _mali_osk_errcode_t _ump_osk_mem_mapregion_map( ump_memory_allocation * descript
 	struct vm_area_struct *vma;
 	_mali_osk_errcode_t retval;
 
-	if (NULL == descriptor)	{
-		MSG_ERR(("descriptor is NULL in _ump_osk_mem_mapregion_map()"));
-		return _MALI_OSK_ERR_FAULT;
-	}
+	if (NULL == descriptor) return _MALI_OSK_ERR_FAULT;
 
 	vma = (struct vm_area_struct*)descriptor->process_mapping_info;
 
-	if (NULL == vma) {
-		MSG_ERR(("vma is NULL in _ump_osk_mem_mapregion_map()"));
-		return _MALI_OSK_ERR_FAULT;
-	}
+	if (NULL == vma ) return _MALI_OSK_ERR_FAULT;
 
 	retval = remap_pfn_range( vma, ((u32)descriptor->mapping) + offset, (*phys_addr) >> PAGE_SHIFT, size, vma->vm_page_prot) ? _MALI_OSK_ERR_FAULT : _MALI_OSK_ERR_OK;;
 
@@ -308,27 +300,6 @@ static void _ump_osk_msync_with_virt(ump_dd_mem * mem, ump_uk_msync_op op, u32 s
 	return;
 }
 
-void _ump_osk_msync_old( ump_dd_mem * mem, ump_uk_msync_op op, u32 start, u32 address, u32 size)
-{
-	int i;
-	u32 start_p, end_p;
-	ump_dd_physical_block *block;
-
-	DBG_MSG(3,
-		("Flushing nr of blocks: %u. First: paddr: 0x%08x vaddr: 0x%08x size:%dB\n",
-		 mem->nr_blocks, mem->block_array[0].addr,
-		 phys_to_virt(mem->block_array[0].addr),
-		 mem->block_array[0].size));
-
-	flush_all_cpu_caches();
-#ifdef CONFIG_CACHE_L2X0
-	if ((op == _UMP_UK_MSYNC_CLEAN_AND_INVALIDATE))
-		outer_flush_all();
-	else
-		outer_clean_all();
-#endif
-}
-
 static void level1_cache_flush_all(void)
 {
 	DBG_MSG(4, ("UMP[xx] Flushing complete L1 cache\n"));
@@ -348,7 +319,11 @@ void _ump_osk_msync( ump_dd_mem * mem, void * virt, u32 offset, u32 size, ump_uk
 		end_v   = (void *)(start_v + size - 1);
 		/*  There is no dmac_clean_range, so the L1 is always flushed,
 		 *  also for UMP_MSYNC_CLEAN. */
-		dmac_flush_range(start_v, end_v);
+		if (size >= SZ_64K)
+			flush_all_cpu_caches();
+		else
+			dmac_flush_range(start_v, end_v);
+
 		DBG_MSG(3, ("UMP[%02u] Flushing CPU L1 Cache. Cpu address: %x-%x\n", mem->secure_id, start_v,end_v));
 	}
 	else
@@ -397,6 +372,14 @@ void _ump_osk_msync( ump_dd_mem * mem, void * virt, u32 offset, u32 size, ump_uk
 
 
 	/* Flush L2 using physical addresses, block for block. */
+	if ((virt!=NULL) && (mem->size_bytes >= SZ_1M)) {
+		if (op == _UMP_UK_MSYNC_CLEAN)
+			outer_clean_all();
+		else if ((op == _UMP_UK_MSYNC_INVALIDATE) || (op == _UMP_UK_MSYNC_CLEAN_AND_INVALIDATE))
+			outer_flush_all();
+		return;
+	}
+
 	for (i=0 ; i < mem->nr_blocks; i++)
 	{
 		u32 start_p, end_p;
@@ -499,3 +482,4 @@ void _ump_osk_mem_mapregion_get( ump_dd_mem ** mem, unsigned long vaddr)
 	DBG_MSG(3, ("Get handle: 0x%08lx\n", handle));
 	*mem = (ump_dd_mem*)handle;
 }
+

@@ -35,6 +35,10 @@
 #include <linux/earlysuspend.h>
 #endif
 #define EARLYSUSPEND_HOTPLUGLOCK 1
+#define DEFAULT_FREQ_BOOST_TIME      (500000)
+#define MAX_FREQ_BOOST_TIME        (5000000)
+
+u64 freq_boosted_time;
 
 /*
  * runqueue average
@@ -150,7 +154,7 @@ static unsigned int get_nr_run_avg(void)
 #define DEF_SAMPLING_DOWN_FACTOR		(2)
 #define MAX_SAMPLING_DOWN_FACTOR		(100000)
 #define DEF_FREQUENCY_DOWN_DIFFERENTIAL		(5)
-#define DEF_FREQUENCY_UP_THRESHOLD		(85)
+#define DEF_FREQUENCY_UP_THRESHOLD		(90)
 
 /* for multiple freq_step */
 #define DEF_UP_THRESHOLD_DIFF	(5)
@@ -158,13 +162,13 @@ static unsigned int get_nr_run_avg(void)
 #define DEF_FREQUENCY_MIN_SAMPLE_RATE		(10000)
 #define MIN_FREQUENCY_UP_THRESHOLD		(11)
 #define MAX_FREQUENCY_UP_THRESHOLD		(100)
-#define DEF_SAMPLING_RATE			(50000)
+#define DEF_SAMPLING_RATE			(10000)
 #define MIN_SAMPLING_RATE			(10000)
 #define MAX_HOTPLUG_RATE			(40u)
 
 #define DEF_MAX_CPU_LOCK			(0)
 #define DEF_MIN_CPU_LOCK			(0)
-#define DEF_CPU_UP_FREQ				(500000)
+#define DEF_CPU_UP_FREQ				(200000)
 #define DEF_CPU_DOWN_FREQ			(200000)
 #define DEF_UP_NR_CPUS				(1)
 #define DEF_CPU_UP_RATE				(10)
@@ -175,8 +179,8 @@ static unsigned int get_nr_run_avg(void)
 
 #define DEF_START_DELAY				(0)
 
-#define UP_THRESHOLD_AT_MIN_FREQ		(60)
-#define FREQ_FOR_RESPONSIVENESS			(400000)
+#define UP_THRESHOLD_AT_MIN_FREQ		(85)
+#define FREQ_FOR_RESPONSIVENESS			(500000)
 /* for fast decrease */
 #define FREQ_FOR_FAST_DOWN				(1200000)
 #define UP_THRESHOLD_AT_FAST_DOWN		(95)
@@ -264,6 +268,9 @@ static struct dbs_tuners {
 	unsigned int ignore_nice;
 	unsigned int sampling_down_factor;
 	unsigned int io_is_busy;
+        unsigned int boosted;
+        unsigned int freq_boost_time;
+        unsigned int boostfreq;
 	/* pegasusq tuners */
 	unsigned int freq_step;
 	unsigned int cpu_up_rate;
@@ -277,6 +284,7 @@ static struct dbs_tuners {
 	unsigned int dvfs_debug;
 	unsigned int max_freq;
 	unsigned int min_freq;
+        
 #ifdef CONFIG_HAS_EARLYSUSPEND
 	int early_suspend;
 #endif
@@ -302,6 +310,8 @@ static struct dbs_tuners {
 #endif
 	.up_threshold_at_min_freq = UP_THRESHOLD_AT_MIN_FREQ,
 	.freq_for_responsiveness = FREQ_FOR_RESPONSIVENESS,
+        .freq_boost_time = DEFAULT_FREQ_BOOST_TIME,
+        .boostfreq = 0,
 };
 
 
@@ -500,6 +510,9 @@ show_one(min_cpu_lock, min_cpu_lock);
 show_one(dvfs_debug, dvfs_debug);
 show_one(up_threshold_at_min_freq, up_threshold_at_min_freq);
 show_one(freq_for_responsiveness, freq_for_responsiveness);
+show_one(boostpulse, boosted);
+show_one(boosttime, freq_boost_time);
+show_one(boostfreq, boostfreq);
 static ssize_t show_hotplug_lock(struct kobject *kobj,
 				struct attribute *attr, char *buf)
 {
@@ -858,6 +871,38 @@ static ssize_t store_freq_for_responsiveness(struct kobject *a, struct attribute
 	return count;
 }
 
+static ssize_t store_boostpulse(struct kobject *kobj, struct attribute *attr,
+        const char *buf, size_t count)
+{
+  int ret;
+  unsigned int input;
+
+  ret = sscanf(buf, "%u", &input);
+  if (ret < 0)
+    return ret;
+
+  if (input > 1 && input <= MAX_FREQ_BOOST_TIME)
+    dbs_tuners_ins.freq_boost_time = input;
+  else
+    dbs_tuners_ins.freq_boost_time = DEFAULT_FREQ_BOOST_TIME;
+
+  dbs_tuners_ins.boosted = 1;
+  freq_boosted_time = ktime_to_us(ktime_get());
+  return count;
+}
+
+static ssize_t store_boostfreq(struct kobject *a, struct attribute *b,
+           const char *buf, size_t count)
+{
+  unsigned int input;
+  int ret;
+  ret = sscanf(buf, "%u", &input);
+  if (ret != 1)
+    return -EINVAL;
+  dbs_tuners_ins.boostfreq = input;
+  return count;
+}
+
 define_one_global_rw(sampling_rate);
 define_one_global_rw(io_is_busy);
 define_one_global_rw(up_threshold);
@@ -876,6 +921,8 @@ define_one_global_rw(hotplug_lock);
 define_one_global_rw(dvfs_debug);
 define_one_global_rw(up_threshold_at_min_freq);
 define_one_global_rw(freq_for_responsiveness);
+define_one_global_rw(boostpulse);
+define_one_global_rw(boostfreq);
 
 static struct attribute *dbs_attributes[] = {
 	&sampling_rate_min.attr,
@@ -915,6 +962,8 @@ static struct attribute *dbs_attributes[] = {
 #endif
 	&up_threshold_at_min_freq.attr,
 	&freq_for_responsiveness.attr,
+        &boostpulse.attr,
+        &boostfreq.attr,
 	NULL
 };
 
@@ -1144,6 +1193,7 @@ static void dbs_check_cpu(struct cpu_dbs_info_s *this_dbs_info)
 
 	struct cpufreq_policy *policy;
 	unsigned int j;
+        unsigned int boostfreq;
 	int num_hist = hotplug_history->num_hist;
 	int max_hotplug_rate = MAX_HOTPLUG_RATE;
 	int up_threshold = dbs_tuners_ins.up_threshold;
@@ -1154,6 +1204,19 @@ static void dbs_check_cpu(struct cpu_dbs_info_s *this_dbs_info)
 	int load_each[4] = {-1, -1, -1, -1};
 	int rq_avg = 0;
 	policy = this_dbs_info->cur_policy;
+ 
+/* Only core0 controls the boost */
+  if (dbs_tuners_ins.boosted && policy->cpu == 0) {
+    if (ktime_to_us(ktime_get()) - freq_boosted_time >=
+         dbs_tuners_ins.freq_boost_time) {
+      dbs_tuners_ins.boosted = 0;
+    }
+  }
+  if (dbs_tuners_ins.boostfreq != 0)
+    boostfreq = dbs_tuners_ins.boostfreq;
+  else
+    boostfreq = policy->max;
+
 
 	hotplug_history->usage[num_hist].freq = policy->cur;
 	hotplug_history->usage[num_hist].rq_avg = get_nr_run_avg();
@@ -1282,6 +1345,13 @@ static void dbs_check_cpu(struct cpu_dbs_info_s *this_dbs_info)
 		return;
 	}
 
+  /* check for frequency boost */
+  if (dbs_tuners_ins.boosted && policy->cur < boostfreq) {
+    dbs_freq_increase(policy, boostfreq);
+    dbs_tuners_ins.boostfreq = policy->cur;
+    return;
+  }
+
 	/* Check for frequency decrease */
 #ifndef CONFIG_ARCH_EXYNOS4
 	/* if we cannot reduce the frequency anymore, break out early */
@@ -1304,6 +1374,10 @@ static void dbs_check_cpu(struct cpu_dbs_info_s *this_dbs_info)
 		freq_next = max_load_freq /
 			(dbs_tuners_ins.up_threshold -
 			 dbs_tuners_ins.down_differential);
+        if (dbs_tuners_ins.boosted &&
+        freq_next < boostfreq) {
+        freq_next = boostfreq;
+        }
 
 		/* No longer fully busy, reset rate_mult */
 		this_dbs_info->rate_mult = 1;
