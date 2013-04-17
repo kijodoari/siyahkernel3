@@ -77,23 +77,23 @@
 #if defined(CONFIG_MACH_T0)
 #if defined(CONFIG_TARGET_LOCALE_KOR)
 #define FULL_SOC_DEFAULT	9700
-#define FULL_SOC_LOW		9600
+#define FULL_SOC_LOW		5000
 #define FULL_SOC_HIGH		10050
 #define KEEP_FULL_SOC		100	/* 1.0% */
 #else
 #define FULL_SOC_DEFAULT	9650
-#define FULL_SOC_LOW		9500
+#define FULL_SOC_LOW		5000
 #define FULL_SOC_HIGH		10050
 #define KEEP_FULL_SOC		100	/* 1.0% */
 #endif
 #elif defined(CONFIG_MACH_GC1)
 #define FULL_SOC_DEFAULT	9700
-#define FULL_SOC_LOW		9650
+#define FULL_SOC_LOW		5000
 #define FULL_SOC_HIGH		10000
 #define KEEP_FULL_SOC		110	/* 1.1% */
 #else	/* M0, C1,,, */
 #define FULL_SOC_DEFAULT	9850
-#define FULL_SOC_LOW		9700
+#define FULL_SOC_LOW		5000
 #define FULL_SOC_HIGH		10000
 #define KEEP_FULL_SOC		100	/* 1.0% */
 #endif

@@ -29,8 +29,8 @@
 #endif
 
 #define CUSTOMVOLTAGE_VERSION 1
-#define CPU_UV_MV_MAX 1500000
-#define CPU_UV_MV_MIN 600000
+#define CPU_UV_MV_MAX 1600000
+#define CPU_UV_MV_MIN 800000
 
 #ifdef MODULE
 static int (*gm_misc_register)(struct miscdevice * misc);
@@ -53,9 +53,12 @@ static int num_int_freqs = 3;
 #else
 static int num_int_freqs = 6;
 #endif
+int fcount = 0;
+
 void customvoltage_updateintvolt(unsigned long * int_voltages)
 {
 }
+
 void customvoltage_updatemaxvolt(unsigned long * max_voltages)
 {
     if( max_voltages[0] > CPU_UV_MV_MAX ) max_voltages[0] = CPU_UV_MV_MAX;
@@ -64,11 +67,9 @@ void customvoltage_updatemaxvolt(unsigned long * max_voltages)
 
 ssize_t show_UV_uV_table(struct cpufreq_policy *policy, char *buf) {
 	int i, len = 0;
-	if (buf)
-	{
-		for (i = exynos_info->max_support_idx; i<=exynos_info->min_support_idx; i++)
-		{
-			if(exynos_info->freq_table[i].frequency==CPUFREQ_ENTRY_INVALID) continue;
+	if (buf) {
+		for (i = exynos_info->max_support_idx; i<=exynos_info->min_support_idx; i++) {
+			if (exynos_info->freq_table[i].frequency == CPUFREQ_ENTRY_INVALID) continue;
 			len += sprintf(buf + len, "%dmhz: %d uV\n", 
 				exynos_info->freq_table[i].frequency/1000,
 				exynos_info->volt_table[i]);
@@ -80,11 +81,9 @@ ssize_t show_UV_uV_table(struct cpufreq_policy *policy, char *buf) {
 ssize_t show_UV_mV_table(struct cpufreq_policy *policy, char *buf)
 {
 	int i, len = 0;
-	if (buf)
-	{
-		for (i = exynos_info->max_support_idx; i<=exynos_info->min_support_idx; i++)
-		{
-			if(exynos_info->freq_table[i].frequency==CPUFREQ_ENTRY_INVALID) continue;
+	if (buf) {
+		for (i = exynos_info->max_support_idx; i<=exynos_info->min_support_idx; i++) {
+			if (exynos_info->freq_table[i].frequency == CPUFREQ_ENTRY_INVALID) continue;
 			len += sprintf(buf + len, "%dmhz: %d mV\n",
 			exynos_info->freq_table[i].frequency/1000,
 			((exynos_info->volt_table[i] % 1000) + exynos_info->volt_table[i])/1000);
@@ -96,25 +95,22 @@ ssize_t show_UV_mV_table(struct cpufreq_policy *policy, char *buf)
 ssize_t acpuclk_get_vdd_levels_str(char *buf)
 {
 	int i, len = 0;
-	if (buf)
-	{
-		for (i = exynos_info->max_support_idx; i<=exynos_info->min_support_idx; i++)
-		{
-			if(exynos_info->freq_table[i].frequency==CPUFREQ_ENTRY_INVALID) continue;
+	if (buf) {
+		for (i = exynos_info->max_support_idx; i<=exynos_info->min_support_idx; i++) {
+			if (exynos_info->freq_table[i].frequency == CPUFREQ_ENTRY_INVALID) continue;
 			len += sprintf(buf + len, "%8u: %4d\n", 
 				exynos_info->freq_table[i].frequency,
 				((exynos_info->volt_table[i] % 1000) + exynos_info->volt_table[i])/1000);
 		}
-}
-return len;
+	}
+	return len;
 }
 
 void acpuclk_set_vdd(unsigned int khz, unsigned int vdd)
 {
 	int i;
 	unsigned int new_vdd;
-	for (i = exynos_info->max_support_idx; i<=exynos_info->min_support_idx; i++)
-	{
+	for (i = exynos_info->max_support_idx; i<=exynos_info->min_support_idx; i++) {
 		if(exynos_info->freq_table[i].frequency==CPUFREQ_ENTRY_INVALID) continue;
 		if (khz == 0)
 			new_vdd = min(
@@ -129,7 +125,7 @@ void acpuclk_set_vdd(unsigned int khz, unsigned int vdd)
 		else continue;
 
 		//always round down
-		if(new_vdd % ROUNDDOWN_STEP)
+		if (new_vdd % ROUNDDOWN_STEP)
 			new_vdd = (new_vdd / ROUNDDOWN_STEP) * ROUNDDOWN_STEP;
 
 		exynos_info->volt_table[i] = new_vdd;
@@ -140,53 +136,43 @@ ssize_t store_UV_uV_table(struct cpufreq_policy *policy,
 				 const char *buf, size_t count) {
 	int i = 0;
 	int j = 0;
-	int u[20] = { 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0 } , stepcount = 0, tokencount = 0;
-
+	int u[] = { 
+			0,0,0,0,0,0,0,0,0,0,
+			0,0,0,0,0,0,0,0,0,0,
+			0,0,0,0,0,0,0,0,0,0 };
+	int tokencount = 0;
 	if(count < 1) return -EINVAL;
 
-	//parse input... time to miss strtok... -gm
-	for(j = 0; i < count; i++)
-	{
+	/* parse input... time to miss strtok... -gm */
+	for(j = 0; i < count; i++) {
 		char c = buf[i];
-		if(c >= '0' && c <= '9')
-		{
-			if(tokencount < j + 1) tokencount = j + 1;
+		if (c >= '0' && c <= '9') {
+			if (tokencount < j + 1) tokencount = j + 1;
 			u[j] *= 10;
 			u[j] += (c - '0');
-		}
-		else if(c == ' ' || c == '\t')
-		{
-			if(u[j] != 0)
-			{
+		} else if (c == ' ' || c == '\t') {
+			if (u[j] != 0) {
 				j++;
+				if(j >= sizeof(u)) return -EINVAL;
 			}
-		}
-		else
+		} else
 			break;
 	}
 	
-	//find number of available steps
-	for(i = exynos_info->max_support_idx; i<=exynos_info->min_support_idx; i++)
-	{
-		if(exynos_info->freq_table[i].frequency==CPUFREQ_ENTRY_INVALID) continue;
-		stepcount++;
-	}
-	//do not keep backward compatibility for scripts this time.
-	//I want the number of tokens to be exactly the same with stepcount -gm
-	if(stepcount != tokencount) return -EINVAL;
+	/* do not keep backward compatibility for scripts this time.
+	 * I want the number of tokens to be exactly the same with stepcount -gm
+	 */
+	if (fcount != tokencount) return -EINVAL;
 	
-	//we have u[0] starting from the first available frequency to u[stepcount]
-	//that is why we use an additiona j here...
-	for(j=0, i = exynos_info->max_support_idx; i<=exynos_info->min_support_idx; i++)
-	{
-		if(exynos_info->freq_table[i].frequency==CPUFREQ_ENTRY_INVALID) continue;
+	/* we have u[0] starting from the first available frequency to u[stepcount]
+	 * that is why we use an additiona j here...
+	 */
+	for (j = 0, i = exynos_info->max_support_idx; i<=exynos_info->min_support_idx; i++) {
+		if (exynos_info->freq_table[i].frequency == CPUFREQ_ENTRY_INVALID) continue;
 
-		if (u[j] > CPU_UV_MV_MAX)
-		{
+		if (u[j] > CPU_UV_MV_MAX) {
 			u[j] = CPU_UV_MV_MAX;
-		}
-		else if (u[j] < CPU_UV_MV_MIN)
-		{
+		} else if (u[j] < CPU_UV_MV_MIN) {
 			u[j] = CPU_UV_MV_MIN;
 		}
 		exynos_info->volt_table[i] = u[j];
@@ -200,58 +186,48 @@ ssize_t store_UV_mV_table(struct cpufreq_policy *policy,
 {
 	int i = 0;
 	int j = 0;
-	int u[20] = { 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0 } , stepcount = 0, tokencount = 0;
+	int u[] = { 
+			0,0,0,0,0,0,0,0,0,0,
+			0,0,0,0,0,0,0,0,0,0,
+			0,0,0,0,0,0,0,0,0,0 };
+	int tokencount = 0;
 
-	if(count < 1) return -EINVAL;
+	if (count < 1) return -EINVAL;
 
-	//parse input... time to miss strtok... -gm
-	for(j = 0; i < count; i++)
-	{
+	/* parse input... time to miss strtok... -gm */
+	for (j = 0; i < count; i++) {
 		char c = buf[i];
-		if(c >= '0' && c <= '9')
-		{
-			if(tokencount < j + 1) tokencount = j + 1;
+		if (c >= '0' && c <= '9') {
+			if (tokencount < j + 1) tokencount = j + 1;
 			u[j] *= 10;
 			u[j] += (c - '0');
-		}
-		else if(c == ' ' || c == '\t')
-		{
-			if(u[j] != 0)
-			{
+		} else if(c == ' ' || c == '\t') {
+			if (u[j] != 0) {
 				j++;
+				if(j >= sizeof(u)) return -EINVAL;
 			}
-		}
-		else
+		} else
 			break;
 	}
 	
-	//find number of available steps
-	for(i = exynos_info->max_support_idx; i<=exynos_info->min_support_idx; i++)
-	{
-		if(exynos_info->freq_table[i].frequency==CPUFREQ_ENTRY_INVALID) continue;
-		stepcount++;
-	}
-	//do not keep backward compatibility for scripts this time.
-	//I want the number of tokens to be exactly the same with stepcount -gm
-	if(stepcount != tokencount) return -EINVAL;
+	/* do not keep backward compatibility for scripts this time.
+	 * I want the number of tokens to be exactly the same with stepcount -gm
+	 */
+	if (fcount != tokencount) return -EINVAL;
 	
-	//we have u[0] starting from the first available frequency to u[stepcount]
-	//that is why we use an additiona j here...
-	for(j=0, i = exynos_info->max_support_idx; i<=exynos_info->min_support_idx; i++)
-	{
-		if(exynos_info->freq_table[i].frequency==CPUFREQ_ENTRY_INVALID) continue;
+	/* we have u[0] starting from the first available frequency to u[stepcount]
+	 * that is why we use an additiona j here...
+	 */
+	for (j = 0, i = exynos_info->max_support_idx; i <= exynos_info->min_support_idx; i++) {
+		if (exynos_info->freq_table[i].frequency == CPUFREQ_ENTRY_INVALID) continue;
+		u[j] *= 1000;
+		/* always round down */
+		if (u[j] % ROUNDDOWN_STEP)
+			u[j] = (u[j] / ROUNDDOWN_STEP) * ROUNDDOWN_STEP;
 
-		u[i] *= 1000;
-		//always round down
-		if(u[i] % ROUNDDOWN_STEP)
-			u[i] = (u[i] / ROUNDDOWN_STEP) * ROUNDDOWN_STEP;
-
-		if (u[j] > CPU_UV_MV_MAX)
-		{
+		if (u[j] > CPU_UV_MV_MAX) {
 			u[j] = CPU_UV_MV_MAX;
-		}
-		else if (u[j] < CPU_UV_MV_MIN)
-		{
+		} else if (u[j] < CPU_UV_MV_MIN) {
 			u[j] = CPU_UV_MV_MIN;
 		}
 		exynos_info->volt_table[i] = u[j];
@@ -283,45 +259,33 @@ ssize_t store_vdd_levels(struct cpufreq_policy *policy, const char *buf, size_t 
 	if (count < 1)
 		return 0;
 
-	if (buf[0] == '-')
-	{
+	if (buf[0] == '-') {
 		sign = -1;
 		i++;
-	}
-	else if (buf[0] == '+')
-	{
+	} else if (buf[0] == '+') {
 		sign = 1;
 		i++;
 	}
 
-	for (j = 0; i < count; i++)
-	{
+	for (j = 0; i < count; i++) {
 		char c = buf[i];
-		if ((c >= '0') && (c <= '9'))
-		{
+		if ((c >= '0') && (c <= '9')) {
 			pair[j] *= 10;
 			pair[j] += (c - '0');
-		}
-		else if ((c == ' ') || (c == '\t'))
-		{
-			if (pair[j] != 0)
-			{
+		} else if ((c == ' ') || (c == '\t')) {
+			if (pair[j] != 0) {
 				j++;
 				if ((sign != 0) || (j > 1))
 				break;
 			}
-		}
-		else
+		} else
 			break;
 	}
 
-	if (sign != 0)
-	{
+	if (sign != 0) {
 		if (pair[0] > 0)
 			acpuclk_set_vdd(0, sign * pair[0]);
-	}
-	else
-	{
+	} else {
 		if ((pair[0] > 0) && (pair[1] > 0))
 			acpuclk_set_vdd((unsigned)pair[0], pair[1]);
 		else
@@ -354,8 +318,7 @@ static ssize_t customvoltage_intvolt_read(struct device * dev, struct device_att
 {
 	int i, j = 0;
 
-    for (i = 0; i < num_int_freqs; i++)
-	{
+	for (i = 0; i < num_int_freqs; i++) {
 		j += sprintf(&buf[j], "%umhz: %u mV\n", 
 			exynos4_busfreq_table[i].mem_clk, 
 			exynos4_busfreq_table[i].volt / 1000);
@@ -366,84 +329,76 @@ static ssize_t customvoltage_intvolt_read(struct device * dev, struct device_att
 
 static ssize_t customvoltage_intvolt_write(struct device * dev, struct device_attribute * attr, const char * buf, size_t size)
 {
-    int i = 0, j = 0, next_freq = 0;
-    unsigned long voltage;
+	int i = 0, j = 0, next_freq = 0;
+	unsigned long voltage;
 
-    char buffer[16];
+	char buffer[16]; /* freq steps from L0 to L15 + L16 0 end freq*/
 
-    while (1)
-	{
-	    buffer[j] = buf[i];
+	while (1) {
+		buffer[j] = buf[i];
+		i++;
+		j++;
 
-	    i++;
-	    j++;
+		if (buf[i] == ' ' || buf[i] == '\0') {
+			buffer[j] = '\0';
 
-	    if (buf[i] == ' ' || buf[i] == '\0')
-		{
-		    buffer[j] = '\0';
+			if (sscanf(buffer, "%lu", &voltage) == 1) {
+					exynos4_busfreq_table[next_freq].volt = voltage * 1000;	
 
-		    if (sscanf(buffer, "%lu", &voltage) == 1)
-			{
-				exynos4_busfreq_table[next_freq].volt = voltage * 1000;	
-		
-			    next_freq++;
+				next_freq++;
 			}
 
-		    if (buf[i] == '\0' || next_freq > num_int_freqs)
-			{
-			    break;
+			if (buf[i] == '\0' || next_freq > num_int_freqs) {
+				break;
 			}
-
-		    j = 0;
+			j = 0;
 		}
 	}
 
 //    customvoltage_updateintvolt(int_voltages);
 
-    return size;
+	return size;
 }
 
 static ssize_t customvoltage_maxarmvolt_read(struct device * dev, struct device_attribute * attr, char * buf)
 {
-    return sprintf(buf, "%lu mV\n", max_voltages[0] / 1000);
+	return sprintf(buf, "%lu mV\n", max_voltages[0] / 1000);
 }
 
 static ssize_t customvoltage_maxarmvolt_write(struct device * dev, struct device_attribute * attr, const char * buf, size_t size)
 {
-    unsigned long max_volt;
+	unsigned long max_volt;
 
-    if (sscanf(buf, "%lu", &max_volt) == 1)
-	{
-	    max_voltages[0] = max_volt * 1000;
+	if (sscanf(buf, "%lu", &max_volt) == 1) {
+		max_voltages[0] = max_volt * 1000;
 
-	    customvoltage_updatemaxvolt(max_voltages);
+		customvoltage_updatemaxvolt(max_voltages);
 	}
 
-    return size;
+	return size;
 }
 
 static ssize_t customvoltage_maxintvolt_read(struct device * dev, struct device_attribute * attr, char * buf)
 {
-    return sprintf(buf, "%lu mV\n", max_voltages[1] / 1000);
+	return sprintf(buf, "%lu mV\n", max_voltages[1] / 1000);
 }
 
 static ssize_t customvoltage_maxintvolt_write(struct device * dev, struct device_attribute * attr, const char * buf, size_t size)
 {
-    unsigned long max_volt;
+	unsigned long max_volt;
 
-    if (sscanf(buf, "%lu", &max_volt) == 1)
-	{
-	    max_voltages[1] = max_volt * 1000;
+	if (sscanf(buf, "%lu", &max_volt) == 1) {
+		max_voltages[1] = max_volt * 1000;
 
-	    customvoltage_updatemaxvolt(max_voltages);
+		customvoltage_updatemaxvolt(max_voltages);
 	}
 
-    return size;
+	return size;
 }
 
 static ssize_t customvoltage_version(struct device * dev, struct device_attribute * attr, char * buf)
 {
-    return sprintf(buf, "%u\n", CUSTOMVOLTAGE_VERSION);
+	return sprintf(buf, "%u\n", CUSTOMVOLTAGE_VERSION);
 }
 
 static DEVICE_ATTR(arm_volt, S_IRUGO | S_IWUGO, customvoltage_armvolt_read, customvoltage_armvolt_write);
@@ -452,8 +407,7 @@ static DEVICE_ATTR(max_arm_volt, S_IRUGO | S_IWUGO, customvoltage_maxarmvolt_rea
 static DEVICE_ATTR(max_int_volt, S_IRUGO | S_IWUGO, customvoltage_maxintvolt_read, customvoltage_maxintvolt_write);
 static DEVICE_ATTR(version, S_IRUGO , customvoltage_version, NULL);
 
-static struct attribute *customvoltage_attributes[] = 
-    {
+static struct attribute *customvoltage_attributes[] = {
 	&dev_attr_arm_volt.attr,
 	&dev_attr_max_arm_volt.attr,
 #ifndef CONFIG_CPU_EXYNOS4210
@@ -462,18 +416,16 @@ static struct attribute *customvoltage_attributes[] =
 #endif
 	&dev_attr_version.attr,
 	NULL
-    };
+};
 
-static struct attribute_group customvoltage_group = 
-    {
+static struct attribute_group customvoltage_group = {
 	.attrs  = customvoltage_attributes,
-    };
+};
 
-static struct miscdevice customvoltage_device = 
-    {
+static struct miscdevice customvoltage_device = {
 	.minor = MISC_DYNAMIC_MINOR,
 	.name = "customvoltage",
-    };
+};
 
 cpufreq_freq_attr_rw(vdd_levels);
 cpufreq_freq_attr_rw(UV_mV_table);
@@ -483,6 +435,11 @@ void create_standard_UV_interfaces(void)
 {
 	int ret = 0;
 	struct cpufreq_policy *policy = cpufreq_cpu_get(0);
+	int i;
+	for (fcount = 0, i = exynos_info->max_support_idx; i <= exynos_info->min_support_idx; i++) {
+		if (exynos_info->freq_table[i].frequency == CPUFREQ_ENTRY_INVALID) continue;
+		fcount++;
+	}
 	ret = sysfs_create_file(&policy->kobj, &vdd_levels.attr);
 	ret = sysfs_create_file(&policy->kobj, &UV_mV_table.attr);
 	ret = sysfs_create_file(&policy->kobj, &UV_uV_table.attr);
@@ -494,9 +451,9 @@ static int __init customvoltage_init(void)
     int ret;
 
 #ifdef MODULE
-	 gm_misc_register = (int (*)(struct miscdevice *))
+	gm_misc_register = (int (*)(struct miscdevice *))
 			kallsyms_lookup_name("misc_register");
-	 gm_misc_deregister = (int (*)(struct miscdevice *))
+	gm_misc_deregister = (int (*)(struct miscdevice *))
 			kallsyms_lookup_name("misc_deregister");
 	gm_exynos_info = *(
 		(struct exynos_dvfs_info **)kallsyms_lookup_name("exynos_info")
@@ -507,17 +464,15 @@ static int __init customvoltage_init(void)
 #endif
 //    pr_info("%s misc_register(%s)\n", __FUNCTION__, customvoltage_device.name);
 
-    ret = misc_register(&customvoltage_device);
+	ret = misc_register(&customvoltage_device);
 
-    if (ret) 
-	{
-	    pr_err("%s misc_register(%s) fail\n", __FUNCTION__, customvoltage_device.name);
+	if (ret) {
+		pr_err("%s misc_register(%s) fail\n", __FUNCTION__, customvoltage_device.name);
 
-	    return 1;
+		return 1;
 	}
 
-    if (sysfs_create_group(&customvoltage_device.this_device->kobj, &customvoltage_group) < 0) 
-	{
+	if (sysfs_create_group(&customvoltage_device.this_device->kobj, &customvoltage_group) < 0) {
 	    pr_err("%s sysfs_create_group fail\n", __FUNCTION__);
 	    pr_err("Failed to create sysfs group for device (%s)!\n", customvoltage_device.name);
 	}
