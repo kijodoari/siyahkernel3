@@ -135,14 +135,14 @@ int step4_down = 95;
 #endif
 
 mali_dvfs_table mali_dvfs_all[MAX_MALI_DVFS_STEPS]={
-	{100   ,1000000   ,  950000},
+	{100   ,1000000   ,  900000},
 	{160   ,1000000   ,  950000},
 	{200   ,1000000   ,  950000},
 	{267   ,1000000   , 1025000},
 	{400   ,1000000   , 1100000} };
 
 mali_dvfs_table mali_dvfs[MALI_DVFS_STEPS]={
-	{100   ,1000000   , 950000},
+	{100   ,1000000   , 900000},
 #if (MALI_DVFS_STEPS > 1)
 	{160   ,1000000   , 950000},
 #if (MALI_DVFS_STEPS > 2)
