@@ -35,10 +35,6 @@
 #include <mach/gpufreq.h>
 #endif
 
-#ifdef CONFIG_FAST_BOOT
-#include <linux/fake_shut_down.h>
-#endif
-
 #include "power.h"
 
 DEFINE_MUTEX(pm_mutex);
@@ -191,24 +187,9 @@ static ssize_t state_show(struct kobject *kobj, struct kobj_attribute *attr,
 #endif
 	return (s - buf);
 }
-
 #ifdef CONFIG_FAST_BOOT
-bool fake_shut_down;
+bool fake_shut_down = false;
 EXPORT_SYMBOL(fake_shut_down);
-
-RAW_NOTIFIER_HEAD(fsd_notifier_list);
-
-int register_fake_shut_down_notifier(struct notifier_block *nb)
-{
-	return raw_notifier_chain_register(&fsd_notifier_list, nb);
-}
-EXPORT_SYMBOL(register_fake_shut_down_notifier);
-
-int unregister_fake_shut_down_notifier(struct notifier_block *nb)
-{
-	return raw_notifier_chain_unregister(&fsd_notifier_list, nb);
-}
-EXPORT_SYMBOL(unregister_fake_shut_down_notifier);
 #endif
 
 static ssize_t state_store(struct kobject *kobj, struct kobj_attribute *attr,
@@ -245,8 +226,6 @@ static ssize_t state_store(struct kobject *kobj, struct kobj_attribute *attr,
 	if (len == 4 && !strncmp(buf, "dmem", len)) {
 		pr_info("%s: fake shut down!!!\n", __func__);
 		fake_shut_down = true;
-		raw_notifier_call_chain(&fsd_notifier_list,
-				FAKE_SHUT_DOWN_CMD_ON, NULL);
 		state = PM_SUSPEND_MEM;
 		error = 0;
 	}
@@ -480,9 +459,6 @@ static ssize_t cpufreq_max_limit_store(struct kobject *kobj,
 			printk(KERN_ERR "%s: Unlock request is ignored\n",
 				__func__);
 	} else { /* Lock request */
-		if (val < 1200000) {
-			val = 1000000;
-
 		if (get_cpufreq_level((unsigned int)val, &cpufreq_level)
 		    == VALID_LEVEL) {
 			if (cpufreq_max_limit_val != -1)
@@ -497,7 +473,6 @@ static ssize_t cpufreq_max_limit_store(struct kobject *kobj,
 		} else /* Invalid lock request --> No action */
 			printk(KERN_ERR "%s: Lock request is invalid\n",
 				__func__);
-		}
 	}
 
 	ret = n;
@@ -539,11 +514,11 @@ static ssize_t cpufreq_min_limit_store(struct kobject *kobj,
 	} else { /* Lock request */
 		if (get_cpufreq_level((unsigned int)val, &cpufreq_level)
 			== VALID_LEVEL) {
-//			if (cpufreq_min_limit_val != -1)
+			if (cpufreq_min_limit_val != -1)
 				/* Unlock the previous lock */
-//				exynos_cpufreq_lock_free(DVFS_LOCK_ID_USER);
-//			lock_ret = exynos_cpufreq_lock(
-//					DVFS_LOCK_ID_USER, cpufreq_level);
+				exynos_cpufreq_lock_free(DVFS_LOCK_ID_USER);
+			lock_ret = exynos_cpufreq_lock(
+					DVFS_LOCK_ID_USER, cpufreq_level);
 			/* ret of exynos_cpufreq_lock is meaningless.
 			   0 is fail? success? */
 			cpufreq_min_limit_val = val;
