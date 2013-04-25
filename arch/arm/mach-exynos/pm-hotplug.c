@@ -177,14 +177,14 @@ static int exynos4_pm_hotplug_notifier_event(struct notifier_block *this,
 		mutex_lock(&hotplug_lock);
 		user_lock_saved = user_lock;
 		user_lock = 1;
-		pr_info("%s: saving pm_hotplug lock %x\n",
+		pr_debug("%s: saving pm_hotplug lock %x\n",
 			__func__, user_lock_saved);
 		mutex_unlock(&hotplug_lock);
 		return NOTIFY_OK;
 	case PM_POST_RESTORE:
 	case PM_POST_SUSPEND:
 		mutex_lock(&hotplug_lock);
-		pr_info("%s: restoring pm_hotplug lock %x\n",
+		pr_debug("%s: restoring pm_hotplug lock %x\n",
 			__func__, user_lock_saved);
 		user_lock = user_lock_saved;
 		mutex_unlock(&hotplug_lock);

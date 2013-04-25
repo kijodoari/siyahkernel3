@@ -2128,12 +2128,6 @@ gfp_to_alloc_flags(gfp_t gfp_mask)
 	} else if (unlikely(rt_task(current)) && !in_interrupt())
 		alloc_flags |= ALLOC_HARDER;
 
-	if (likely(!(gfp_mask & __GFP_NOMEMALLOC))) {
-		if (!in_interrupt() &&
-		    ((current->flags & PF_MEMALLOC) ||
-		     unlikely(test_thread_flag(TIF_MEMDIE))))
-			alloc_flags |= ALLOC_NO_WATERMARKS;
-	}
 
 	return alloc_flags;
 }
@@ -2377,10 +2371,7 @@ __alloc_pages_nodemask(gfp_t gfp_mask, unsigned int order,
 	first_zones_zonelist(zonelist, high_zoneidx,
 				nodemask ? : &cpuset_current_mems_allowed,
 				&preferred_zone);
-	if (!preferred_zone) {
-		put_mems_allowed();
-		return NULL;
-	}
+
 
 	/* First allocation attempt */
 	page = get_page_from_freelist(gfp_mask|__GFP_HARDWALL, nodemask, order,
@@ -2390,7 +2381,7 @@ __alloc_pages_nodemask(gfp_t gfp_mask, unsigned int order,
 		page = __alloc_pages_slowpath(gfp_mask, order,
 				zonelist, high_zoneidx, nodemask,
 				preferred_zone, migratetype);
-	put_mems_allowed();
+	
 
 	trace_mm_page_alloc(page, order, gfp_mask, migratetype);
 	return page;
@@ -2622,7 +2613,7 @@ bool skip_free_areas_node(unsigned int flags, int nid)
 
 	get_mems_allowed();
 	ret = !node_isset(nid, cpuset_current_mems_allowed);
-	put_mems_allowed();
+	
 out:
 	return ret;
 }
